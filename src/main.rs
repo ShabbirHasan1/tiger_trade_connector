@@ -1,92 +1,94 @@
-use log::info;
-use tiger_trade_connector::{make_message, read_message};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+//! mini-redis server.
+//!
+//! This file is the entry point for the server implemented in the library. It
+//! performs command line parsing and passes the arguments on to
+//! `mini_redis::server`.
+//!
+//! The `clap` crate is used for parsing arguments.
+
+use tiger_trade_connector::{server, DEFAULT_PORT};
+
+use clap::Parser;
 use tokio::net::TcpListener;
+use tokio::signal;
+
+#[cfg(feature = "otel")]
+// To be able to set the XrayPropagator
+use opentelemetry::global;
+#[cfg(feature = "otel")]
+// To configure certain options such as sampling rate
+use opentelemetry::sdk::trace as sdktrace;
+#[cfg(feature = "otel")]
+// For passing along the same XrayId across services
+use opentelemetry_aws::trace::XrayPropagator;
+#[cfg(feature = "otel")]
+// The `Ext` traits are to allow the Registry to accept the
+// OpenTelemetry-specific types (such as `OpenTelemetryLayer`)
+use tracing_subscriber::{
+    fmt, layer::SubscriberExt, util::SubscriberInitExt, util::TryInitError, EnvFilter,
+};
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    env_logger::init();
+pub async fn main() -> tiger_trade_connector::Result<()> {
+    set_up_logging()?;
 
-    let listener = TcpListener::bind("127.0.0.1:7496").await?;
+    let cli = Cli::parse();
+    let port = cli.port.unwrap_or(DEFAULT_PORT);
 
-    // Logging the listener initialization
-    info!("Listening on: 127.0.0.1:7496");
+    // Bind a TCP listener
+    let listener = TcpListener::bind(&format!("127.0.0.1:{}", port)).await?;
 
-    loop {
-        let (mut socket, _) = listener.accept().await?;
+    server::run(listener, signal::ctrl_c()).await;
 
-        tokio::spawn(async move {
-            let mut buf = [0; 1024];
+    Ok(())
+}
 
-            // In a loop, read data from the socket and write the data back.
-            loop {
-                let n = match socket.read(&mut buf).await {
-                    // socket closed
-                    Ok(0) => return,
-                    Ok(n) => n,
-                    Err(e) => {
-                        eprintln!("failed to read from socket; err = {:?}", e);
-                        return;
-                    }
-                };
+#[derive(Parser, Debug)]
+#[clap(name = "mini-redis-server", version, author, about = "A Redis server")]
+struct Cli {
+    #[clap(long)]
+    port: Option<u16>,
+}
 
-                // Logging the request content
-                info!("received: {:?}", std::str::from_utf8(&buf[0..n]));
+#[cfg(not(feature = "otel"))]
+fn set_up_logging() -> tiger_trade_connector::Result<()> {
+    // See https://docs.rs/tracing for more info
+    tracing_subscriber::fmt::try_init()
+}
 
-                match std::str::from_utf8(&buf[0..n]).unwrap() {
-                    "API\0\0\0\0\tv100..176" => {
-                        if let Err(e) = socket
-                            .write_all(&make_message("176\x0020240209 22:23:12 EST\x00"))
-                            .await
-                        {
-                            eprintln!("failed to write to socket; err = {:?}", e);
-                            return;
-                        }
-                    }
-                    _ => match read_message(&buf[0..n]) {
-                        // 71 corresponds to the "START_API" in the client's outgoing message codes, followed by "2" as
-                        // a hardcoded API version, followed by "0" as the client_id.
-                        // Client expects to get account id and next valid order id
-                        msg if msg.starts_with("71") => {
-                            // Next valid order id contains 3 fields:
-                            // "9" corresponds to NEXT_VALID_ID in the client's incoming message codes
-                            // followed by "1" which represents the field type of message (1 is INT)
-                            // followed by "1" which is the value
-                            if let Err(e) = socket.write_all(&make_message("9\x001\x001\x00")).await
-                            {
-                                eprintln!("failed to write to socket; err = {:?}", e);
-                                return;
-                            }
-                            // Account id contains 3 fields as well:
-                            // "15" corresponds to MANAGED_ACCTS
-                            // "1" corresponds to INT field type (not sure why, I need to check)
-                            // "U12345678" is an account name
-                            if let Err(e) = socket
-                                .write_all(&make_message("15\x001\x00U12345678\x00"))
-                                .await
-                            {
-                                eprintln!("failed to write to socket; err = {:?}", e);
-                                return;
-                            }
-                        }
-                        _ => {
-                            if let Err(e) = socket.write_all(&make_message("unknown\x00\x00")).await
-                            {
-                                eprintln!("failed to write to socket; err = {:?}", e);
-                                return;
-                            }
-                        }
-                    },
-                }
-                //     _ => {
-                //         println!("message: {}", read_message(&buf[0..n]));
-                //         if let Err(e) = socket.write_all(&make_message("unknown\0\0")).await {
-                //             eprintln!("failed to write to socket; err = {:?}", e);
-                //             return;
-                //         }
-                //     }
-                // }
-            }
-        });
-    }
+#[cfg(feature = "otel")]
+fn set_up_logging() -> Result<(), TryInitError> {
+    // Set the global propagator to X-Ray propagator
+    // Note: If you need to pass the x-amzn-trace-id across services in the same trace,
+    // you will need this line. However, this requires additional code not pictured here.
+    // For a full example using hyper, see:
+    // https://github.com/open-telemetry/opentelemetry-rust/blob/v0.19.0/examples/aws-xray/src/server.rs#L14-L26
+    global::set_text_map_propagator(XrayPropagator::default());
+
+    let tracer = opentelemetry_otlp::new_pipeline()
+        .tracing()
+        .with_exporter(opentelemetry_otlp::new_exporter().tonic())
+        .with_trace_config(
+            sdktrace::config()
+                .with_sampler(sdktrace::Sampler::AlwaysOn)
+                // Needed in order to convert the trace IDs into an Xray-compatible format
+                .with_id_generator(sdktrace::XrayIdGenerator::default()),
+        )
+        .install_simple()
+        .expect("Unable to initialize OtlpPipeline");
+
+    // Create a tracing layer with the configured tracer
+    let opentelemetry = tracing_opentelemetry::layer().with_tracer(tracer);
+
+    // Parse an `EnvFilter` configuration from the `RUST_LOG`
+    // environment variable.
+    let filter = EnvFilter::from_default_env();
+
+    // Use the tracing subscriber `Registry`, or any other subscriber
+    // that impls `LookupSpan`
+    tracing_subscriber::registry()
+        .with(opentelemetry)
+        .with(filter)
+        .with(fmt::Layer::default())
+        .try_init()
 }
