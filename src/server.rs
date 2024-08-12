@@ -330,6 +330,8 @@ impl Handler {
                 }
             };
 
+            info!("After let maybe_frame");
+
             // If `None` is returned from `read_frame()` then the peer closed
             // the socket. There is no further work to do and the task can be
             // terminated.
@@ -338,10 +340,14 @@ impl Handler {
                 None => return Ok(()),
             };
 
+            info!("After let frame");
+
             // Convert the redis frame into a command struct. This returns an
             // error if the frame is not a valid redis command or it is an
             // unsupported command.
             let cmd = Command::from_frame(frame)?;
+
+            info!("After let cmd");
 
             // Logs the `cmd` object. The syntax here is a shorthand provided by
             // the `tracing` crate. It can be thought of as similar to:

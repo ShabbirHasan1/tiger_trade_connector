@@ -14,6 +14,7 @@ mod ping;
 pub use ping::Ping;
 
 mod unknown;
+use tracing::info;
 pub use unknown::Unknown;
 
 use crate::{Connection, Db, Frame, Parse, ParseError, Shutdown};
@@ -47,12 +48,19 @@ impl Command {
         //
         // The frame value must be an array variant. Any other frame variants
         // result in an error being returned.
+
+        info!("in Command::from_frame");
+
         let mut parse = Parse::new(frame)?;
+
+        info!("parse is: {:?}", parse);
 
         // All redis commands begin with the command name as a string. The name
         // is read and converted to lower cases in order to do case sensitive
         // matching.
         let command_name = parse.next_string()?.to_lowercase();
+
+        info!("command_name is: {:?}", command_name);
 
         // Match the command name, delegating the rest of the parsing to the
         // specific command.
