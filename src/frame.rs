@@ -69,9 +69,32 @@ impl Frame {
         match get_four_u8(src)? {
             b"API\0" => {
                 info!("Message::check() matched b'API\0'");
-                Ok(())
+                // get_size from get_four_u8(src) to check if size is equal to src.len() - 4,
+                // advance if needed, or skip
+
+                // need to offset b"API\0" in order to read size bytes correctly
+                src.advance(4);
+
+                let size = get_size(src)? as usize;
+                let length = src.get_ref().len() - 8;
+
+                info!("Size is: {}", size);
+                info!("Length is: {}", length);
+
+                if size == length {
+                    Ok(())
+                } else {
+                    Err(format!("protocol error; unable to decode an API frame").into())
+                }
             }
-            actual => Err(format!("protocol error; invalid frame type byte `{:?}`", actual).into()),
+            actual => {
+                // if get_four_u8(src) is equal to src.len() - 4, return Ok(()),
+                // else return error below
+                if get_size(src)? as usize == src.get_ref().len() - 4 {
+                    return Ok(());
+                }
+                Err(format!("protocol error; invalid frame type byte `{:?}`", actual).into())
+            }
         }
     }
 
@@ -344,12 +367,13 @@ fn get_decimal(src: &mut Cursor<&[u8]>) -> Result<u64, Error> {
 }
 
 /// Frame size from the first 4 bytes
-fn get_size(src: &mut Cursor<&[u8]>, s: usize) -> Result<u32, Error> {
+fn get_size(src: &mut Cursor<&[u8]>) -> Result<u32, Error> {
     info!("Inside get_size");
     info!("cursor length is {}", src.get_ref().len());
     info!("cursor position is {}", src.position());
+    let start = src.position() as usize;
     //this ignores advance and reads from the beginning of the cursor
-    let buf = &src.get_ref()[s..s+4];
+    let buf = &src.get_ref()[start..start + 4];
     info!("buf is {:?}", buf);
     let size = u32::from_be_bytes(buf.try_into().unwrap());
     Ok(size)
@@ -375,7 +399,7 @@ fn get_line<'a>(src: &mut Cursor<&'a [u8]>) -> Result<&'a [u8], Error> {
     info!("Inside get_line");
     info!("cursor length is {}", src.get_ref().len());
     info!("cursor position is {}", src.position());
-    let size = get_size(src, 4).unwrap();
+    let size = get_size(src).unwrap();
     info!("size is {}", size);
     // Scan the bytes directly
     let start = src.position() as usize;

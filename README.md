@@ -45,3 +45,19 @@ connection.read_frame -> connection.parse_frame -> Frame::check -> get_u8(match 
 **get_line** checks the length of the cursor and reads from the second byte till the end of cursor where it checks for the end of line char "\r"
 then it shifts the cursor position on 2 and returns the line (it allows next run to read a new line), returns incomplete error when it finishs the reading
 without finding the "\r" char.
+
+
+## Establish a connection
+Here is a simple flow chart:
+
+```mermaid
+graph TD;
+    A-->B;
+    A-->C;
+    B-->D;
+    C-->D;
+```
+
+
+
+## Dont convert bytes into string before the parse
