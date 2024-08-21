@@ -186,14 +186,20 @@ impl Frame {
             b"API\0" => {
                 info!("Message::parse() matched b'API\0'");
                 // we need to cut the "API" prefix
-                 src.advance(4);
-                // Read the line and convert it to `Vec<u8>`
-                let line = get_line(src)?.to_vec();
+                src.advance(4);
 
-                // Convert the line to a String
-                let string = String::from_utf8(line)?;
+                let size = get_size(src)? as usize;
 
-                Ok(Frame::Simple(string))
+                if src.remaining() < size {
+                    return Err(Error::Incomplete);
+                }
+
+                let data = Bytes::copy_from_slice(&src.chunk()[4..4 + size]);
+
+                // check why they use skip here
+                // skip(src, size)?;
+
+                Ok(Frame::Bulk(data))
             }
             _ => unimplemented!(),
         }
