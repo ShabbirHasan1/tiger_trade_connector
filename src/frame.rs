@@ -11,6 +11,7 @@ use tracing::info;
 /// A frame in the Redis protocol.
 #[derive(Clone, Debug)]
 pub enum Frame {
+    Api(Bytes),
     Simple(String),
     Error(String),
     Integer(u64),
@@ -199,7 +200,7 @@ impl Frame {
                 // check why they use skip here
                 // skip(src, size)?;
 
-                Ok(Frame::Bulk(data))
+                Ok(Frame::Api(data))
             }
             _ => unimplemented!(),
         }
@@ -295,6 +296,10 @@ impl fmt::Display for Frame {
             Frame::Error(msg) => write!(fmt, "error: {}", msg),
             Frame::Integer(num) => num.fmt(fmt),
             Frame::Bulk(msg) => match str::from_utf8(msg) {
+                Ok(string) => string.fmt(fmt),
+                Err(_) => write!(fmt, "{:?}", msg),
+            },
+            Frame::Api(msg) => match str::from_utf8(msg) {
                 Ok(string) => string.fmt(fmt),
                 Err(_) => write!(fmt, "{:?}", msg),
             },
