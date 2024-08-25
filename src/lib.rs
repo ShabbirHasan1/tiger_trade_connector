@@ -27,7 +27,6 @@
 
 // pub mod clients;
 // pub use clients::{BlockingClient, BufferedClient, Client};
-
 pub mod cmd;
 pub use cmd::Command;
 

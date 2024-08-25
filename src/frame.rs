@@ -4,7 +4,7 @@
 use bytes::{Buf, Bytes};
 use std::convert::TryInto;
 use std::fmt;
-use std::io::{Cursor, Read};
+use std::io::{BufRead, Cursor, Read};
 use std::num::TryFromIntError;
 use std::string::FromUtf8Error;
 use tracing::info;
@@ -74,13 +74,17 @@ impl Frame {
                 // advance if needed, or skip
 
                 // need to offset b"API\0" in order to read size bytes correctly
-                src.advance(4);
+                skip(src, 4)?;
 
                 let size = get_size(src)? as usize;
                 let length = src.get_ref().len() - 8;
 
                 info!("Size is: {}", size);
                 info!("Length is: {}", length);
+
+                // we need to skip the rest of the frame as well since Connection::parse_frame
+                // calculates the buffer size based on the cursor position
+                skip(src, length + 4)?;
 
                 if size == length {
                     Ok(())
@@ -91,7 +95,9 @@ impl Frame {
             actual => {
                 // if get_four_u8(src) is equal to src.len() - 4, return Ok(()),
                 // else return error below
-                if get_size(src)? as usize == src.get_ref().len() - 4 {
+                let size = get_size(src)? as usize;
+                if size == src.get_ref().len() - 4 {
+                    skip(src, size + 4)?;
                     return Ok(());
                 }
                 Err(format!("protocol error; invalid frame type byte `{:?}`", actual).into())
@@ -187,7 +193,8 @@ impl Frame {
             b"API\0" => {
                 info!("Message::parse() matched b'API\0'");
                 // we need to cut the "API" prefix
-                src.advance(4);
+                // src.advance(4);
+                skip(src, 4)?;
 
                 let size = get_size(src)? as usize;
 
@@ -197,12 +204,26 @@ impl Frame {
 
                 let data = Bytes::copy_from_slice(&src.chunk()[4..4 + size]);
 
-                // check why they use skip here
-                // skip(src, size)?;
+                info!("data is: {:?}", data);
 
                 Ok(Frame::Api(data))
             }
-            _ => unimplemented!(),
+            _ => {
+                info!("Message::parse() didn't match b'API\0'");
+                let size = get_size(src)? as usize;
+
+                if src.remaining() < size {
+                    return Err(Error::Incomplete);
+                }
+
+                let data = Bytes::copy_from_slice(&src.chunk()[4..4 + size]);
+
+                info!("data is: {:?}", data);
+
+                // check why they use skip here
+                // skip(src, size)?;
+                unimplemented!()
+            },
         }
     }
 

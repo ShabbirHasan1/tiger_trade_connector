@@ -1,6 +1,7 @@
 use crate::frame::{self, Frame};
 
 use bytes::{Buf, BytesMut};
+use tracing::info;
 use std::io::{self, Cursor};
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
 use tokio::net::TcpStream;
@@ -106,6 +107,8 @@ impl Connection {
                 // frame by checking the cursor position.
                 let len = buf.position() as usize;
 
+                info!("len in connection::parse_frame is: {}", len);
+
                 // Reset the position to zero before passing the cursor to
                 // `Frame::parse`.
                 buf.set_position(0);
@@ -203,11 +206,17 @@ impl Connection {
             Frame::Bulk(val) => {
                 let len = val.len();
 
-                self.stream.write_u8(b'$').await?;
-                self.write_decimal(len as u64).await?;
+                self.write_size(len as u32).await?;
                 self.stream.write_all(val).await?;
-                self.stream.write_all(b"\r\n").await?;
             }
+            // Frame::Bulk(val) => {
+            //     let len = val.len();
+
+            //     self.stream.write_u8(b'$').await?;
+            //     self.write_decimal(len as u64).await?;
+            //     self.stream.write_all(val).await?;
+            //     self.stream.write_all(b"\r\n").await?;
+            // }
             Frame::Api(val) => {
                 let len = val.len();
 
@@ -240,5 +249,25 @@ impl Connection {
         self.stream.write_all(b"\r\n").await?;
 
         Ok(())
+    }
+
+    /// Write a decimal frame to the stream
+    async fn write_size(&mut self, val: u32) -> io::Result<()> {
+        let size: [u8; 4] = val.to_be_bytes();
+        self.stream.write_all(&size).await?;
+
+        Ok(())
+    }
+
+
+    /// u32_to_vec_u8 converts u32 to a vector of four bytes since we need
+    /// the same prefix size for all messages
+    pub async fn u32_to_vec_u8(value: u32) -> Vec<u8> {
+        let byte1 = ((value >> 24) & 0xFF) as u8;
+        let byte2 = ((value >> 16) & 0xFF) as u8;
+        let byte3 = ((value >> 8) & 0xFF) as u8;
+        let byte4 = (value & 0xFF) as u8;
+
+        vec![byte1, byte2, byte3, byte4]
     }
 }

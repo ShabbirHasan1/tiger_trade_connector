@@ -50,14 +50,12 @@ without finding the "\r" char.
 ## Establish a connection
 Here is a simple flow chart:
 
-```mermaid
-graph TD;
-    A-->B;
-    A-->C;
-    B-->D;
-    C-->D;
-```
-
+| client | direction | server | description |
+| ------ | --------- | ------ | ----------- |
+|b"API\0#size#v100..176" | -> | | Client sends a connection request with a range of supported API versions |
+| | <- |  b"#size#176\020240825 17:02:51 -04:00\0" | Server responds with it's version if it is in range, sends null otherwise |
+|b"#size#71\02\00\0\0 | -> |  | Client sends the start_api request with major version 2 and it's id 0
+|  | <- | b"#size#9\01\01\0" | Server sends the next_valid_order_id as a confirmation of the connection, 9 command, 1 order id, 1 is content type (int)
 
 
 ## Dont convert bytes into string before the parse

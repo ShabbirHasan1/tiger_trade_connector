@@ -3,6 +3,9 @@ use crate::{Connection, Db, Frame, Parse, API_VERSION};
 use bytes::Bytes;
 use tracing::{debug, info, instrument};
 
+use chrono::prelude::*;
+use chrono_tz::America::New_York;
+
 /// Get the value of key.
 ///
 /// If the key does not exist the special value nil is returned. An error is
@@ -99,7 +102,13 @@ impl Api {
         info!("max is: {}", max);
 
         match min <= API_VERSION && API_VERSION <= max {
-            true => Some(Bytes::copy_from_slice(&API_VERSION.to_be_bytes())),
+            true => {
+                let now = Local::now();
+                let timestamp = now.format("%Y%m%d %H:%M:%S %Z").to_string();
+                let value = format!("{}\0{}\0", API_VERSION.to_string(), timestamp);
+                Some(Bytes::copy_from_slice(&value.into_bytes()))
+            }
+            // true => Some(Bytes::copy_from_slice(&API_VERSION.to_string().into_bytes())),
             false => None,
         }
     }
