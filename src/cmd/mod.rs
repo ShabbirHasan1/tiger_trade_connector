@@ -1,6 +1,9 @@
 mod api;
 pub use api::Api;
 
+mod next_valid_order_id;
+pub use next_valid_order_id::NextValidOrderId;
+
 // mod publish;
 // pub use publish::Publish;
 
@@ -25,6 +28,7 @@ use crate::{Connection, Db, Frame, Parse, ParseError, Shutdown};
 #[derive(Debug)]
 pub enum Command {
     Api(Api),
+    NextValidOrderId(NextValidOrderId),
     // Get(Get),
     // Publish(Publish),
     // Set(Set),
@@ -67,6 +71,7 @@ impl Command {
         // specific command.
         let command = match &command_name[..] {
             "api" => Command::Api(Api::parse_frames(&mut parse)?),
+            "71" => Command::NextValidOrderId(NextValidOrderId::parse_frames(&mut parse)?),
             // "get" => Command::Get(Get::parse_frames(&mut parse)?),
             // "publish" => Command::Publish(Publish::parse_frames(&mut parse)?),
             // "set" => Command::Set(Set::parse_frames(&mut parse)?),
@@ -87,7 +92,7 @@ impl Command {
         // Check if there is any remaining unconsumed fields in the `Parse`
         // value. If fields remain, this indicates an unexpected frame format
         // and an error is returned.
-        parse.finish()?;
+        //parse.finish()?;
 
         // The command has been successfully parsed
         Ok(command)
@@ -106,7 +111,8 @@ impl Command {
         use Command::*;
 
         match self {
-            Api(cmd) => cmd.apply(db, dst).await,
+            Api(cmd) => cmd.apply(dst).await,
+            NextValidOrderId(cmd) => cmd.apply(dst).await,
             // Get(cmd) => cmd.apply(db, dst).await,
             // Publish(cmd) => cmd.apply(db, dst).await,
             // Set(cmd) => cmd.apply(db, dst).await,
@@ -123,6 +129,7 @@ impl Command {
     pub(crate) fn get_name(&self) -> &str {
         match self {
             Command::Api(_) => "api",
+            Command::NextValidOrderId(_) => "next_valid_order_id",
             // Command::Get(_) => "get",
             // Command::Publish(_) => "pub",
             // Command::Set(_) => "set",

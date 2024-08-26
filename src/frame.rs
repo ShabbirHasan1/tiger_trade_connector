@@ -222,7 +222,8 @@ impl Frame {
 
                 // check why they use skip here
                 // skip(src, size)?;
-                unimplemented!()
+                // unimplemented!()
+                Ok(Frame::Bulk(data))
             },
         }
     }

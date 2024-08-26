@@ -1,6 +1,6 @@
 // use crate::{clients::Message, Frame};
 use crate::{Frame};
-use bytes::Bytes;
+use bytes::{Bytes, BytesMut};
 use tracing::info;
 use core::str;
 use std::{fmt, vec};
@@ -38,17 +38,23 @@ impl Parse {
     /// Returns `Err` if `frame` is not an array frame.
     pub(crate) fn new(frame: Frame) -> Result<Parse, ParseError> {
         let message: Bytes = match frame {
-            Frame::Api(message) => message,
+            Frame::Api(message) => {
+                // we need to add b"api" to the beginning of the message
+                let prefix = Bytes::from("api\0");
+                let mut combined = BytesMut::with_capacity(prefix.len() + message.len());
+
+                combined.extend_from_slice(&prefix);
+                combined.extend_from_slice(&message);
+                combined.freeze()
+            }
             Frame::Bulk(message) => message,
             frame => return Err(format!("protocol error; expected array, got {:?}", frame).into()),
         };
 
-        let mut fields: Vec<Vec<u8>> = message
+        let fields: Vec<Vec<u8>> = message
             .split(|&b| b == b'\0')
             .map(|slice| slice.to_vec())
             .collect();
-
-        fields.insert(0, b"api".to_vec());
 
         info!("fields are: {:?}", fields);
 

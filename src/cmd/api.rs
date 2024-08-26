@@ -4,7 +4,6 @@ use bytes::Bytes;
 use tracing::{debug, info, instrument};
 
 use chrono::prelude::*;
-use chrono_tz::America::New_York;
 
 /// Get the value of key.
 ///
@@ -63,8 +62,8 @@ impl Api {
     ///
     /// The response is written to `dst`. This is called by the server in order
     /// to execute a received command.
-    #[instrument(skip(self, db, dst))]
-    pub(crate) async fn apply(self, db: &Db, dst: &mut Connection) -> crate::Result<()> {
+    #[instrument(skip(self, dst))]
+    pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
         // Here I need to call a function that can remove "v" from the key and then split
         // the rest using ".." as a separator. If api version in the connector is between
         // min and max valuesm then return <version>\0<date time>0\  ex: "176\x0020240209 22:23:12 EST\x00"
@@ -111,16 +110,5 @@ impl Api {
             // true => Some(Bytes::copy_from_slice(&API_VERSION.to_string().into_bytes())),
             false => None,
         }
-    }
-
-    /// Converts the command into an equivalent `Frame`.
-    ///
-    /// This is called by the client when encoding a `Get` command to send to
-    /// the server.
-    pub(crate) fn into_frame(self) -> Frame {
-        let mut frame = Frame::array();
-        frame.push_bulk(Bytes::from("api".as_bytes()));
-        frame.push_bulk(Bytes::from(self.key.into_bytes()));
-        frame
     }
 }
