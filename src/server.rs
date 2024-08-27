@@ -367,7 +367,7 @@ impl Handler {
             // command to write response frames directly to the connection. In
             // the case of pub/sub, multiple frames may be send back to the
             // peer.
-            cmd.apply(&self.db, &mut self.connection, &mut self.shutdown)
+            cmd.apply(&mut self.connection, &mut self.shutdown)
                 .await?;
         }
 

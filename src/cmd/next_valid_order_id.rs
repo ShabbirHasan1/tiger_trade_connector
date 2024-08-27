@@ -73,75 +73,44 @@ impl  NextValidOrderId {
         // the rest using ".." as a separator. If api version in the connector is between
         // min and max valuesm then return <version>\0<date time>0\  ex: "176\x0020240209 22:23:12 EST\x00"
         // Get the value from the shared database state
-        let response = if let Some(value) = self.get_next_valid_order_id(&self.client_id) {
-            // If a value is present, it is written to the client in "bulk"
-            // format.
-            info!("Inside response bulk");
-            Frame::Bulk(value)
-        } else {
-            info!("Inside response null");
-            // If there is no value, `Null` is written.
-            Frame::Null
-        };
+
+        let mut response = Frame::array();
+        let order_id = self.get_next_valid_order_id(&self.client_id);
+        let account_id = self.get_user_account_id(&self.client_id);
+        
+        response.push_bulk(order_id); // for each tag we need to send a separate message
+        response.push_bulk(account_id); // we need to send one more message with account summary end  like b"64\01\09001\0"
+ 
 
         debug!(?response);
 
         // Write the response back to the client
         dst.write_frame(&response).await?;
-
-        let response = if let Some(value) = self.get_user_account_id(&self.client_id) {
-            // If a value is present, it is written to the client in "bulk"
-            // format.
-            info!("Inside response bulk");
-            Frame::Bulk(value)
-        } else {
-            info!("Inside response null");
-            // If there is no value, `Null` is written.
-            Frame::Null
-        };
-
-        debug!(?response);
-
-        // Write the response back to the client
-        dst.write_frame(&response).await?;
-
-        // we need to send one more message with account_id like b"15\01\0U12345678\0"
-        // dst.write_frame(&response).await?;
 
         Ok(())
     }
 
     /// New function that returns the next valid order id
-    pub(crate) fn get_next_valid_order_id(&self, client_id: &str) -> Option<Bytes> {
+    pub(crate) fn get_next_valid_order_id(&self, client_id: &str) -> Bytes {
         info!("Inside get_next_valid_order_id");
 
         info!("client_id is: {}", client_id);
 
         let order_id = 1;
 
-        match order_id == 1 {
-            true => {
-                let value = format!("9\01\0{}\0", order_id);
-                Some(Bytes::copy_from_slice(&value.into_bytes()))
-            }
-            _ => None,
-        }
+        let value = format!("9\01\0{}\0", order_id);
+        Bytes::copy_from_slice(&value.into_bytes())
     }
 
     /// New function that returns the next valid order id
-    pub(crate) fn get_user_account_id(&self, client_id: &str) -> Option<Bytes> {
+    pub(crate) fn get_user_account_id(&self, client_id: &str) -> Bytes {
         info!("Inside get_user_account_id");
 
         info!("client_id is: {}", client_id);
 
-        let account_id = "U12345678";
+        let account_id = "U12345678"; // one or coma separated list
 
-        match account_id == "U12345678" {
-            true => {
-                let value = format!("15\01\0{}\0", account_id);
-                Some(Bytes::copy_from_slice(&value.into_bytes()))
-            }
-            _ => None,
-        }
+        let value = format!("15\01\0{}\0", account_id);
+        Bytes::copy_from_slice(&value.into_bytes())
     }
 }

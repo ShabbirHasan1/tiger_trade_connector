@@ -409,6 +409,7 @@ fn get_size(src: &mut Cursor<&[u8]>) -> Result<u32, Error> {
     let buf = &src.get_ref()[start..start + 4];
     info!("buf is {:?}", buf);
     let size = u32::from_be_bytes(buf.try_into().unwrap());
+    info!("After size");
     Ok(size)
 }
 

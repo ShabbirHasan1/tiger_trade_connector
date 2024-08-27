@@ -162,12 +162,6 @@ impl Connection {
         // recursive frame structures. See below for more details.
         match frame {
             Frame::Array(val) => {
-                // Encode the frame type prefix. For an array, it is `*`.
-                self.stream.write_u8(b'*').await?;
-
-                // Encode the length of the array.
-                self.write_decimal(val.len() as u64).await?;
-
                 // Iterate and encode each entry in the array.
                 for entry in &**val {
                     self.write_value(entry).await?;

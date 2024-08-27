@@ -89,48 +89,78 @@ impl  ReqAccountSummary {
         // the rest using ".." as a separator. If api version in the connector is between
         // min and max valuesm then return <version>\0<date time>0\  ex: "176\x0020240209 22:23:12 EST\x00"
         // Get the value from the shared database state
-        let response = if let Some(value) = self.get_account_summary(&self.req_id) {
-            // If a value is present, it is written to the client in "bulk"
-            // format.
-            info!("Inside response bulk");
-            Frame::Bulk(value)
-        } else {
-            info!("Inside response null");
-            // If there is no value, `Null` is written.
-            Frame::Null
-        };
+        let mut response = Frame::array();
+        let account_type = self.get_tag_value(&self.req_id, "AccountType", "INDIVIDUAL", "");
+        let net_liquidation = self.get_tag_value(&self.req_id, "NetLiquidation", "196.35", "USD");
+        let total_cash_value = self.get_tag_value(&self.req_id, "TotalCashValue", "51.39", "USD");
+        let accrued_cache = self.get_tag_value(&self.req_id, "AccruedCash", "0.00", "USD");
+        let buying_power = self.get_tag_value(&self.req_id, "BuyingPower", "51.39", "USD");
+        let equity_with_loan_value = self.get_tag_value(&self.req_id, "EquityWithLoanValue", "196.35", "USD");
+        let gross_position_value = self.get_tag_value(&self.req_id, "GrossPositionValue", "144.96", "USD");
+        let sma = self.get_tag_value(&self.req_id, "SMA", "125.84", "USD");
+        let init_margin_req = self.get_tag_value(&self.req_id, "InitMarginReq", "145.01", "USD");
+        let maint_margin_req = self.get_tag_value(&self.req_id, "MaintMarginReq", "50.74", "USD");
+        let available_funds = self.get_tag_value(&self.req_id, "AvailableFunds", "51.39", "USD");
+        let excess_liquidity = self.get_tag_value(&self.req_id, "ExcessLiquidity", "145.61", "USD");
+        let cushion = self.get_tag_value(&self.req_id, "Cushion", "0.741604", "");
+        let full_init_margin_req = self.get_tag_value(&self.req_id, "FullInitMarginReq", "145.01", "USD");
+        let full_maint_margin_req = self.get_tag_value(&self.req_id, "FullMaintMarginReq", "50.75", "USD");
+        let full_available_funds = self.get_tag_value(&self.req_id, "FullAvailableFunds", "51.39", "USD");
+        let full_excess_liquidity = self.get_tag_value(&self.req_id, "FullExcessLiquidity", "145.61", "USD");
+        let look_ahead_next_change = self.get_tag_value(&self.req_id, "LookAheadNextChange", "1724702400", "");
+        let look_ahead_init_margin_req = self.get_tag_value(&self.req_id, "LookAheadInitMarginReq", "144.96", "USD");
+        let look_ahead_maint_margin_req = self.get_tag_value(&self.req_id, "LookAheadMaintMarginReq", "50.74", "USD");
+        let look_ahead_available_funds = self.get_tag_value(&self.req_id, "LookAheadAvailableFunds", "51.39", "USD");
+        let look_ahead_excess_liquidity = self.get_tag_value(&self.req_id, "LookAheadExcessLiquidity", "145.61", "USD");
+        let day_trades_remaining = self.get_tag_value(&self.req_id, "DayTradesRemaining", "3", "");
+        let leverage = self.get_tag_value(&self.req_id, "Leverage", "0.74", "");
+        let end_summary: Bytes = Bytes::copy_from_slice(&format!("64\01\0{}\0", &self.req_id).into_bytes());
+
+        response.push_bulk(account_type); // for each tag we need to send a separate message
+        response.push_bulk(net_liquidation);
+        response.push_bulk(total_cash_value);
+        response.push_bulk(accrued_cache);
+        response.push_bulk(buying_power);
+        response.push_bulk(equity_with_loan_value);
+        response.push_bulk(gross_position_value);
+        response.push_bulk(sma);
+        response.push_bulk(init_margin_req);
+        response.push_bulk(maint_margin_req);
+        response.push_bulk(available_funds);
+        response.push_bulk(excess_liquidity);
+        response.push_bulk(cushion);
+        response.push_bulk(full_init_margin_req);
+        response.push_bulk(full_maint_margin_req);
+        response.push_bulk(full_available_funds);
+        response.push_bulk(full_excess_liquidity);
+        response.push_bulk(look_ahead_next_change);
+        response.push_bulk(look_ahead_init_margin_req);
+        response.push_bulk(look_ahead_maint_margin_req);
+        response.push_bulk(look_ahead_available_funds);
+        response.push_bulk(look_ahead_excess_liquidity);
+        response.push_bulk(day_trades_remaining);
+        response.push_bulk(leverage);
+        response.push_bulk(end_summary); // we need to send one more message with account summary end  like b"64\01\09001\0"
 
         debug!(?response);
 
         // Write the response back to the client
         dst.write_frame(&response).await?;
 
-        // we need to send one more message with account summary end  like b"64\01\09001\0"
-        // dst.write_frame(&response).await?;
-
         Ok(())
     }
 
-    /// New function that returns the next valid order id
-    pub(crate) fn get_account_summary(&self, req_id: &str) -> Option<Bytes> {
+    /// New function that returns the account summary with all requested tags and values
+    pub(crate) fn get_tag_value(&self, req_id: &str, tag: &str, value: &str, currency: &str) -> Bytes {
         info!("Inside get_account_summary");
 
         info!("req_id is: {}", req_id);
-        info!("tags are: {:?}", &self.tags);
+        //info!("tags are: {:?}", &self.tags);
 
 
         let account_id = "U12345678";
-        let tag = "NetLiquidation";
-        let value = "196.39";
-        let currency = "USD";
 
-        match account_id == "U12345678" {
-            true => {
-                let value = format!("63\01\0{}\0{}\0{}\0{}\0{}\0", req_id, account_id, tag, value, currency); // b"63\01\09001\0U12345678\0NetLiquidation\0196.39\0USD\0
-                Some(Bytes::copy_from_slice(&value.into_bytes()))
-            }
-            // true => Some(Bytes::copy_from_slice(&API_VERSION.to_string().into_bytes())),
-            _ => None,
-        }
+        let value = format!("63\01\0{}\0{}\0{}\0{}\0{}\0", req_id, account_id, tag, value, currency); // b"63\01\09001\0U12345678\0NetLiquidation\0196.39\0USD\0
+        Bytes::copy_from_slice(&value.into_bytes())
     }
 }

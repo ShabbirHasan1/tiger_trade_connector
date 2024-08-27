@@ -24,7 +24,7 @@ mod unknown;
 use tracing::info;
 pub use unknown::Unknown;
 
-use crate::{Connection, Db, Frame, Parse, ParseError, Shutdown};
+use crate::{Connection, Frame, Parse, ParseError, Shutdown};
 
 /// Enumeration of supported Redis commands.
 ///
@@ -110,7 +110,6 @@ impl Command {
     /// to execute a received command.
     pub(crate) async fn apply(
         self,
-        db: &Db,
         dst: &mut Connection,
         shutdown: &mut Shutdown,
     ) -> crate::Result<()> {
