@@ -4,6 +4,10 @@ pub use api::Api;
 mod next_valid_order_id;
 pub use next_valid_order_id::NextValidOrderId;
 
+mod req_account_summary;
+pub use req_account_summary::ReqAccountSummary;
+
+
 // mod publish;
 // pub use publish::Publish;
 
@@ -29,6 +33,7 @@ use crate::{Connection, Db, Frame, Parse, ParseError, Shutdown};
 pub enum Command {
     Api(Api),
     NextValidOrderId(NextValidOrderId),
+    ReqAccountSummary(ReqAccountSummary),
     // Get(Get),
     // Publish(Publish),
     // Set(Set),
@@ -72,6 +77,7 @@ impl Command {
         let command = match &command_name[..] {
             "api" => Command::Api(Api::parse_frames(&mut parse)?),
             "71" => Command::NextValidOrderId(NextValidOrderId::parse_frames(&mut parse)?),
+            "62" => Command::ReqAccountSummary(ReqAccountSummary::parse_frames(&mut parse)?), // b"9\08\0215\00\0IBM\0STK\0\00.0\0\0\0SMART\0\0USD\0\0\00\0\0\0\0"
             // "get" => Command::Get(Get::parse_frames(&mut parse)?),
             // "publish" => Command::Publish(Publish::parse_frames(&mut parse)?),
             // "set" => Command::Set(Set::parse_frames(&mut parse)?),
@@ -113,6 +119,7 @@ impl Command {
         match self {
             Api(cmd) => cmd.apply(dst).await,
             NextValidOrderId(cmd) => cmd.apply(dst).await,
+            ReqAccountSummary(cmd) => cmd.apply(dst).await,
             // Get(cmd) => cmd.apply(db, dst).await,
             // Publish(cmd) => cmd.apply(db, dst).await,
             // Set(cmd) => cmd.apply(db, dst).await,
@@ -130,6 +137,7 @@ impl Command {
         match self {
             Command::Api(_) => "api",
             Command::NextValidOrderId(_) => "next_valid_order_id",
+            Command::ReqAccountSummary(_) => "req_account_summary",
             // Command::Get(_) => "get",
             // Command::Publish(_) => "pub",
             // Command::Set(_) => "set",

@@ -53,7 +53,7 @@ use shutdown::Shutdown;
 /// Used if no port is specified.
 pub const DEFAULT_PORT: u16 = 7496;
 
-pub const API_VERSION: u16 = 176;
+pub const API_VERSION: u16 = 151;
 
 /// Error returned by most functions.
 ///

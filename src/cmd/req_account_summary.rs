@@ -1,3 +1,5 @@
+// b"62\01\01\0All\0AccountType,NetLiquidation,TotalCashValue,SettledCash,AccruedCash,BuyingPower,EquityWithLoanValue,PreviousEquityWithLoanValue,GrossPositionValue,ReqTEquity,ReqTMargin,SMA,InitMarginReq,MaintMarginReq,AvailableFunds,ExcessLiquidity,Cushion,FullInitMarginReq,FullMaintMarginReq,FullAvailableFunds,FullExcessLiquidity,LookAheadNextChange,LookAheadInitMarginReq,LookAheadMaintMarginReq,LookAheadAvailableFunds,LookAheadExcessLiquidity,HighestSeverity,DayTradesRemaining,Leverage\0"
+// b"63\01\09001\0U12345678\0NetLiquidation\0196.39\0USD\0
 use crate::{Connection, Frame, Parse, API_VERSION};
 
 use bytes::Bytes;
@@ -9,18 +11,22 @@ use tracing::{debug, info, instrument};
 /// returned if the value stored at key is not a string, because GET only
 /// handles string values.
 #[derive(Debug)]
-pub struct NextValidOrderId {
+pub struct ReqAccountSummary {
     /// Name of the key to get
     version: String,
-    client_id: String,
+    req_id: String,
+    group: String,
+    tags: Vec<String>, // parse value and split using "," as a delimiter
 }
 
-impl  NextValidOrderId {
+impl  ReqAccountSummary {
     /// Create a new `Get` command which fetches `version` and `id`.
-    pub fn new(version: impl ToString, client_id: impl ToString) -> NextValidOrderId {
-        NextValidOrderId {
-            version: version.to_string(),
-            client_id: client_id.to_string(),
+    pub fn new(version: impl ToString, req_id: impl ToString, group: impl ToString, tags: impl ToString) -> ReqAccountSummary {
+        ReqAccountSummary {
+            version: version.to_string(), // originally int
+            req_id: req_id.to_string(), // originally int
+            group: group.to_string(),
+            tags: tags.to_string().split(",").map(|t: &str| t.to_owned()).collect(),
         }
     }
 
@@ -29,8 +35,16 @@ impl  NextValidOrderId {
         &self.version
     }
 
-    pub fn client_id(&self) -> &str {
-        &self.client_id
+    pub fn req_id(&self) -> &str {
+        &self.req_id
+    }
+
+    pub fn group(&self) -> &str {
+        &self.group
+    }
+
+    pub fn tags(&self) -> &Vec<String> {
+        &self.tags
     }
 
     /// Parse a `Get` instance from a received frame.
@@ -53,14 +67,16 @@ impl  NextValidOrderId {
     /// ```text
     /// GET key
     /// ```
-    pub(crate) fn parse_frames(parse: &mut Parse) -> crate::Result<NextValidOrderId> {
+    pub(crate) fn parse_frames(parse: &mut Parse) -> crate::Result<ReqAccountSummary> {
         // The `GET` string has already been consumed. The next value is the
         // name of the key to get. If the next value is not a string or the
         // input is fully consumed, then an error is returned.
         let version = parse.next_string()?;
-        let client_id = parse.next_string()?;
+        let req_id = parse.next_string()?;
+        let group = parse.next_string()?;
+        let tags = parse.next_string()?.split(",").map(|t: &str| t.to_owned()).collect();
 
-        Ok(NextValidOrderId { version, client_id })
+        Ok(ReqAccountSummary { version, req_id, group, tags })
     }
 
     /// Apply the `Get` command to the specified `Db` instance.
@@ -73,7 +89,7 @@ impl  NextValidOrderId {
         // the rest using ".." as a separator. If api version in the connector is between
         // min and max valuesm then return <version>\0<date time>0\  ex: "176\x0020240209 22:23:12 EST\x00"
         // Get the value from the shared database state
-        let response = if let Some(value) = self.get_next_valid_order_id(&self.client_id) {
+        let response = if let Some(value) = self.get_account_summary(&self.req_id) {
             // If a value is present, it is written to the client in "bulk"
             // format.
             info!("Inside response bulk");
@@ -89,58 +105,31 @@ impl  NextValidOrderId {
         // Write the response back to the client
         dst.write_frame(&response).await?;
 
-        let response = if let Some(value) = self.get_user_account_id(&self.client_id) {
-            // If a value is present, it is written to the client in "bulk"
-            // format.
-            info!("Inside response bulk");
-            Frame::Bulk(value)
-        } else {
-            info!("Inside response null");
-            // If there is no value, `Null` is written.
-            Frame::Null
-        };
-
-        debug!(?response);
-
-        // Write the response back to the client
-        dst.write_frame(&response).await?;
-
-        // we need to send one more message with account_id like b"15\01\0U12345678\0"
+        // we need to send one more message with account summary end  like b"64\01\09001\0"
         // dst.write_frame(&response).await?;
 
         Ok(())
     }
 
     /// New function that returns the next valid order id
-    pub(crate) fn get_next_valid_order_id(&self, client_id: &str) -> Option<Bytes> {
-        info!("Inside get_next_valid_order_id");
+    pub(crate) fn get_account_summary(&self, req_id: &str) -> Option<Bytes> {
+        info!("Inside get_account_summary");
 
-        info!("client_id is: {}", client_id);
+        info!("req_id is: {}", req_id);
+        info!("tags are: {:?}", &self.tags);
 
-        let order_id = 1;
-
-        match order_id == 1 {
-            true => {
-                let value = format!("9\01\0{}\0", order_id);
-                Some(Bytes::copy_from_slice(&value.into_bytes()))
-            }
-            _ => None,
-        }
-    }
-
-    /// New function that returns the next valid order id
-    pub(crate) fn get_user_account_id(&self, client_id: &str) -> Option<Bytes> {
-        info!("Inside get_user_account_id");
-
-        info!("client_id is: {}", client_id);
 
         let account_id = "U12345678";
+        let tag = "NetLiquidation";
+        let value = "196.39";
+        let currency = "USD";
 
         match account_id == "U12345678" {
             true => {
-                let value = format!("15\01\0{}\0", account_id);
+                let value = format!("63\01\0{}\0{}\0{}\0{}\0{}\0", req_id, account_id, tag, value, currency); // b"63\01\09001\0U12345678\0NetLiquidation\0196.39\0USD\0
                 Some(Bytes::copy_from_slice(&value.into_bytes()))
             }
+            // true => Some(Bytes::copy_from_slice(&API_VERSION.to_string().into_bytes())),
             _ => None,
         }
     }
